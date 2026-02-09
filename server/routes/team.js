@@ -12,17 +12,14 @@ const Task = require('../models/Task');
 // @access  Protected
 router.post('/', protect, async (req, res) => {
     try {
-        const { name, hackathonName, description } = req.body;
-
-        if (!req.mongoUser) {
-            return res.status(400).json({ message: "User profile not synced. Please sync first." });
-        }
-
+        const { name, hackathonName, hackathonStartDate, memberSize, description } = req.body;
         const inviteCode = crypto.randomBytes(4).toString('hex').toUpperCase();
 
         const team = await Team.create({
             name,
             hackathonName,
+            hackathonStartDate,
+            memberSize: memberSize || 4,
             description,
             inviteCode,
             admin: req.mongoUser._id,
@@ -54,6 +51,10 @@ router.post('/join/:inviteCode', protect, async (req, res) => {
 
         if (isMember) {
             return res.status(400).json({ message: 'Already a member of this team' });
+        }
+
+        if (team.members.length >= (team.memberSize || 4)) {
+            return res.status(400).json({ message: 'Team is already full' });
         }
 
         team.members.push({ user: req.mongoUser._id, role: 'member' });
@@ -155,6 +156,44 @@ router.patch('/:teamId/checklist/:itemId', protect, checkTeamRole(['admin', 'mem
         res.json(team);
     } catch (error) {
         console.error(error);
+        res.status(500).json({ message: 'Server Error' });
+    }
+});
+
+// @route   PATCH /api/teams/:teamId
+// @desc    Update team details
+// @access  Protected + Admin
+router.patch('/:teamId', protect, checkTeamRole(['admin']), async (req, res) => {
+    try {
+        const { name, hackathonName, hackathonStartDate, memberSize, description } = req.body;
+
+        const team = await Team.findByIdAndUpdate(
+            req.params.teamId,
+            { name, hackathonName, hackathonStartDate, memberSize, description },
+            { new: true }
+        );
+
+        res.json(team);
+    } catch (error) {
+        console.error('Update Team Error:', error);
+        res.status(500).json({ message: 'Server Error' });
+    }
+});
+
+// @route   POST /api/teams/:teamId/checklist
+// @desc    Add custom checklist item
+// @access  Protected + Member
+router.post('/:teamId/checklist', protect, checkTeamRole(['admin', 'member']), async (req, res) => {
+    try {
+        const { item } = req.body;
+        const team = req.team;
+
+        team.submissionChecklist.push({ item, completed: false });
+        await team.save();
+
+        res.json(team);
+    } catch (error) {
+        console.error('Add Checklist Error:', error);
         res.status(500).json({ message: 'Server Error' });
     }
 });

@@ -7,9 +7,14 @@ const ProtectedRoute = ({ children }) => {
 
     if (loading) {
         return (
-            <div className="min-h-screen bg-dark flex flex-col items-center justify-center space-y-4">
-                <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin" />
-                <p className="text-gray-400 font-medium">Loading HackTracker...</p>
+            <div className="min-h-screen bg-[#020617] flex flex-col items-center justify-center relative overflow-hidden">
+                {/* Background Glow */}
+                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-primary/20 blur-[120px] rounded-full animate-pulse-slow" />
+
+                <div className="relative z-10 flex flex-col items-center">
+                    <div className="w-16 h-16 border-4 border-white/10 border-t-primary rounded-full animate-spin mb-6" />
+                    <p className="text-gray-400 font-bold tracking-widest uppercase text-sm animate-pulse">Initializing Interface...</p>
+                </div>
             </div>
         );
     }

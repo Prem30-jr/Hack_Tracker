@@ -12,37 +12,44 @@ const AuthLayout = ({ children, title, subtitle }) => {
             <div className="absolute inset-0 z-0 pointer-events-none">
                 <motion.div
                     animate={{
-                        scale: [1, 1.2, 1],
-                        opacity: [0.1, 0.2, 0.1]
+                        scale: [1, 1.3, 1],
+                        opacity: [0.2, 0.4, 0.2],
+                        x: [0, 50, 0],
+                        y: [0, -50, 0]
                     }}
-                    transition={{ duration: 8, repeat: Infinity }}
-                    className="absolute top-[-10%] right-[-10%] w-96 h-96 bg-primary/20 blur-[120px] rounded-full"
+                    transition={{ duration: 15, repeat: Infinity, ease: "easeInOut" }}
+                    className="absolute -top-[10%] -left-[10%] w-[500px] h-[500px] bg-primary/20 blur-[120px] rounded-full"
                 />
                 <motion.div
                     animate={{
-                        scale: [1, 1.3, 1],
-                        opacity: [0.1, 0.15, 0.1]
+                        scale: [1, 1.2, 1],
+                        opacity: [0.2, 0.3, 0.2],
+                        x: [0, -30, 0],
+                        y: [0, 40, 0]
                     }}
-                    transition={{ duration: 10, repeat: Infinity, delay: 2 }}
-                    className="absolute bottom-[-10%] left-[-10%] w-96 h-96 bg-indigo-600/20 blur-[120px] rounded-full"
+                    transition={{ duration: 12, repeat: Infinity, delay: 2, ease: "easeInOut" }}
+                    className="absolute -bottom-[10%] -right-[10%] w-[500px] h-[500px] bg-secondary/20 blur-[120px] rounded-full"
                 />
             </div>
 
             <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
+                initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                transition={{ duration: 0.5, ease: "easeOut" }}
                 className="w-full max-w-md relative z-10"
             >
-                <div className="glass-card p-10 shadow-2xl shadow-black/50">
-                    <div className="flex flex-col items-center mb-10">
-                        <div
-                            className="p-4 bg-primary/10 rounded-2xl mb-6 cursor-pointer hover:scale-110 transition-transform"
+                <div className="glass-card p-8 md:p-10 shadow-2xl shadow-black/50 border-white/10 backdrop-blur-2xl bg-[#0f172a]/60">
+                    <div className="flex flex-col items-center mb-8">
+                        <motion.div
+                            whileHover={{ scale: 1.1, rotate: 5 }}
+                            whileTap={{ scale: 0.95 }}
+                            className="w-16 h-16 bg-gradient-to-tr from-primary to-primary-hover rounded-2xl flex items-center justify-center mb-6 cursor-pointer shadow-lg shadow-primary/20 border border-white/10"
                             onClick={() => navigate('/')}
                         >
-                            <Rocket className="w-8 h-8 text-primary" />
-                        </div>
-                        <h1 className="text-3xl font-black text-white tracking-tight">{title}</h1>
-                        <p className="text-gray-400 mt-2 text-center text-sm">{subtitle}</p>
+                            <Rocket className="w-8 h-8 text-white" />
+                        </motion.div>
+                        <h1 className="text-3xl font-black text-white tracking-tight text-center">{title}</h1>
+                        <p className="text-gray-400 mt-2 text-center text-sm font-medium">{subtitle}</p>
                     </div>
                     {children}
                 </div>

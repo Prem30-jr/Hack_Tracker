@@ -6,6 +6,11 @@ const TeamSchema = new mongoose.Schema({
         required: true,
     },
     hackathonName: String,
+    hackathonStartDate: Date,
+    memberSize: {
+        type: Number,
+        default: 4
+    },
     description: String,
     inviteCode: {
         type: String,
