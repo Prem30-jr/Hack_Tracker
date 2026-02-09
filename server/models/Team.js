@@ -38,6 +38,7 @@ const TeamSchema = new mongoose.Schema({
     submissionChecklist: [
         {
             item: String,
+            description: String,
             completed: { type: Boolean, default: false }
         }
     ],

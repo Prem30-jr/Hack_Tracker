@@ -516,7 +516,8 @@ const TasksTab = ({ team, tasks, refreshTasks }) => {
                                             </div>
                                         </div>
 
-                                        <h4 className="font-bold text-sm mb-3 text-gray-100 leading-relaxed">{task.title}</h4>
+                                        <h4 className="font-bold text-sm mb-1 text-gray-100 leading-relaxed">{task.title}</h4>
+                                        {task.description && <p className="text-[11px] text-gray-500 line-clamp-2 mb-3 leading-snug">{task.description}</p>}
 
                                         <div className="flex items-center justify-between border-t border-white/5 pt-3 mt-2">
                                             <div className="flex items-center -space-x-2">
@@ -560,6 +561,10 @@ const TasksTab = ({ team, tasks, refreshTasks }) => {
                                 <div className="space-y-1">
                                     <label className="text-xs font-black uppercase text-gray-500 tracking-wider ml-1">Title</label>
                                     <input required value={newTask.title} onChange={(e) => setNewTask({ ...newTask, title: e.target.value })} placeholder="e.g. Implement Auth Flow" className="input-field bg-[#0f172a]/50 focus:bg-[#0f172a]" />
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-xs font-black uppercase text-gray-500 tracking-wider ml-1">Description (Optional)</label>
+                                    <textarea rows="2" value={newTask.description} onChange={(e) => setNewTask({ ...newTask, description: e.target.value })} placeholder="Briefly describe the task goals..." className="input-field bg-[#0f172a]/50 focus:bg-[#0f172a] resize-none" />
                                 </div>
                                 <div className="grid grid-cols-2 gap-4">
                                     <div className="space-y-1">
@@ -644,7 +649,10 @@ const ResourcesTab = ({ team, refreshTeam, refreshTasks }) => {
                                 <div className={cn("w-6 h-6 rounded-full border-2 mr-4 flex items-center justify-center transition-all", item.completed ? "bg-emerald-500 border-emerald-500" : "border-white/20 group-hover:border-primary")}>
                                     {item.completed && <Check className="w-3.5 h-3.5 text-white" />}
                                 </div>
-                                <span className={cn("text-sm font-medium transition-colors", item.completed ? "text-gray-500 line-through" : "text-gray-200")}>{item.item}</span>
+                                <div className="flex flex-col">
+                                    <span className={cn("text-sm font-medium transition-colors", item.completed ? "text-gray-500 line-through" : "text-gray-200")}>{item.item}</span>
+                                    {item.description && <span className="text-[11px] text-gray-500 mt-0.5">{item.description}</span>}
+                                </div>
                             </div>
                         ))}
                         {team.submissionChecklist.length === 0 && (
@@ -661,14 +669,14 @@ const ResourcesTab = ({ team, refreshTeam, refreshTasks }) => {
 
 const ChecklistAdder = ({ team, refreshTeam }) => {
     const [isAdding, setIsAdding] = useState(false);
-    const [newItem, setNewItem] = useState('');
+    const [newItem, setNewItem] = useState({ item: '', description: '' });
 
     const handleAdd = async (e) => {
         e.preventDefault();
-        if (!newItem.trim()) return;
+        if (!newItem.item.trim()) return;
         try {
-            await api.post(`/teams/${team._id}/checklist`, { item: newItem });
-            setNewItem('');
+            await api.post(`/teams/${team._id}/checklist`, newItem);
+            setNewItem({ item: '', description: '' });
             setIsAdding(false);
             refreshTeam();
         } catch (err) {
@@ -687,20 +695,31 @@ const ChecklistAdder = ({ team, refreshTeam }) => {
     );
 
     return (
-        <form onSubmit={handleAdd} className="flex items-center gap-2">
-            <input
-                autoFocus
-                value={newItem}
-                onChange={e => setNewItem(e.target.value)}
-                placeholder="New checklist item..."
-                className="input-field bg-black/40 py-2 border-white/10 focus:border-primary w-64 text-sm"
-            />
-            <button type="submit" className="p-2 bg-primary text-white rounded-lg hover:bg-primary-hover shadow-lg shadow-primary/20">
-                <Check className="w-4 h-4" />
-            </button>
-            <button onClick={() => setIsAdding(false)} className="p-2 bg-white/5 text-gray-400 rounded-lg hover:text-white">
-                <X className="w-4 h-4" />
-            </button>
+        <form onSubmit={handleAdd} className="flex flex-col gap-3 p-4 glass-card bg-black/40 border-white/5 absolute right-0 top-12 z-[20] w-72 shadow-2xl">
+            <div className="space-y-1">
+                <label className="text-[10px] font-black uppercase text-gray-500 ml-1">Title</label>
+                <input
+                    autoFocus
+                    value={newItem.item}
+                    onChange={e => setNewItem({ ...newItem, item: e.target.value })}
+                    placeholder="e.g. Final Pitch PPT"
+                    className="input-field bg-black/40 py-2 border-white/10 focus:border-primary text-sm"
+                />
+            </div>
+            <div className="space-y-1">
+                <label className="text-[10px] font-black uppercase text-gray-500 ml-1">Notes (Optional)</label>
+                <textarea
+                    value={newItem.description}
+                    onChange={e => setNewItem({ ...newItem, description: e.target.value })}
+                    placeholder="Details about submission..."
+                    className="input-field bg-black/40 py-2 border-white/10 focus:border-primary text-sm resize-none"
+                    rows="2"
+                />
+            </div>
+            <div className="flex gap-2">
+                <button type="submit" className="flex-1 btn-primary py-2 text-xs">Add Item</button>
+                <button type="button" onClick={() => setIsAdding(false)} className="px-3 bg-white/5 text-gray-400 rounded-lg hover:text-white border border-white/5">Cancel</button>
+            </div>
         </form>
     );
 };

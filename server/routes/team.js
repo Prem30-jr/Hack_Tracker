@@ -185,10 +185,10 @@ router.patch('/:teamId', protect, checkTeamRole(['admin']), async (req, res) => 
 // @access  Protected + Member
 router.post('/:teamId/checklist', protect, checkTeamRole(['admin', 'member']), async (req, res) => {
     try {
-        const { item } = req.body;
+        const { item, description } = req.body;
         const team = req.team;
 
-        team.submissionChecklist.push({ item, completed: false });
+        team.submissionChecklist.push({ item, description, completed: false });
         await team.save();
 
         res.json(team);
