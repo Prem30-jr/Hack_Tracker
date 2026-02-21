@@ -5,18 +5,6 @@ const TeamSchema = new mongoose.Schema({
         type: String,
         required: true,
     },
-    hackathonName: String,
-    hackathonStartDate: Date,
-    memberSize: {
-        type: Number,
-        default: 4
-    },
-    description: String,
-    inviteCode: {
-        type: String,
-        required: true,
-        unique: true,
-    },
     admin: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User',
@@ -35,23 +23,12 @@ const TeamSchema = new mongoose.Schema({
             },
         },
     ],
-    submissionChecklist: [
-        {
-            item: String,
-            description: String,
-            completed: { type: Boolean, default: false }
-        }
-    ],
-    template: {
-        type: String,
-        enum: ['None', 'SIH', 'Generic Hackathon', 'SaaS MVP'],
-        default: 'None'
-    },
-    githubRepo: String,
+    description: String,
     githubAccessToken: String,
+    githubRepoOwner: String,
     githubRepoId: String,
     githubRepoName: String,
-    githubRepoOwner: String,
+    githubRepo: String,
     githubConnected: { type: Boolean, default: false },
     createdAt: {
         type: Date,

@@ -57,6 +57,7 @@ const Workspace = () => {
     const fetchTeamData = async () => {
         try {
             const res = await api.get(`/teams/${teamId}`);
+            // res.data is { team, workspace }
             setTeam(res.data);
             setLoading(false);
         } catch (err) {
@@ -209,12 +210,12 @@ const Workspace = () => {
                             {tabs.find(t => t.id === activeTab)?.icon && React.createElement(tabs.find(t => t.id === activeTab).icon, { className: "w-5 h-5 mr-3 text-gray-400" })}
                             {tabs.find(t => t.id === activeTab)?.name}
                         </h2>
-                        {team?.hackathonName && (
+                        {team?.workspace?.hackathonName && (
                             <>
                                 <div className="h-4 w-px bg-white/10" />
                                 <span className="text-xs font-medium text-gray-500 flex items-center">
                                     <Trophy className="w-3 h-3 mr-1.5 text-accent" />
-                                    {team.hackathonName}
+                                    {team.workspace.hackathonName}
                                 </span>
                             </>
                         )}
@@ -222,7 +223,7 @@ const Workspace = () => {
 
                     <div className="flex items-center space-x-4">
                         <div className="hidden md:flex -space-x-2">
-                            {team?.members?.slice(0, 3).map((m, i) => (
+                            {team?.team?.members?.slice(0, 3).map((m, i) => (
                                 <div key={i} className="w-8 h-8 rounded-full border-2 border-[#020617] bg-white/10 flex items-center justify-center text-[10px] uppercase font-bold text-gray-300 overflow-hidden relative" title={m.user?.displayName}>
                                     {m.user?.photoURL ? (
                                         <img src={m.user.photoURL} alt={m.user.displayName} className="w-full h-full object-cover" />
@@ -231,9 +232,9 @@ const Workspace = () => {
                                     )}
                                 </div>
                             ))}
-                            {team?.members?.length > 3 && (
+                            {team?.team?.members?.length > 3 && (
                                 <div className="w-8 h-8 rounded-full border-2 border-[#020617] bg-gray-800 flex items-center justify-center text-[10px] font-bold text-gray-400">
-                                    +{team.members.length - 3}
+                                    +{team.team.members.length - 3}
                                 </div>
                             )}
                         </div>
@@ -310,8 +311,14 @@ const OverviewTab = ({ team, tasks }) => {
                 <StatCard
                     icon={Clock}
                     label="Time Remaining"
-                    status="48h"
-                    sublabel="Until Submission"
+                    status={(() => {
+                        if (!team?.workspace?.hackathonEndDate) return "N/A";
+                        const diff = new Date(team.workspace.hackathonEndDate) - new Date();
+                        if (diff <= 0) return "End";
+                        const hours = Math.floor(diff / (1000 * 60 * 60));
+                        return `${hours}h`;
+                    })()}
+                    sublabel={team?.workspace?.hackathonEndDate ? "Until Submission" : "No Deadline"}
                     color="success"
                 />
                 <StatCard
@@ -431,13 +438,13 @@ const StatCard = ({ icon: Icon, label, status, sublabel, color, chart }) => (
 
 const TasksTab = ({ team, tasks, refreshTasks }) => {
     const [showNewTask, setShowNewTask] = useState(false);
-    const [newTask, setNewTask] = useState({ title: '', description: '', priority: 'Medium', deadline: '' });
+    const [newTask, setNewTask] = useState({ title: '', description: '', priority: 'Medium', deadline: '', assignedTo: '' });
 
     const handleCreateTask = async (e) => {
         e.preventDefault();
         try {
-            await api.post(`/tasks/${team._id}`, newTask);
-            setNewTask({ title: '', description: '', priority: 'Medium', deadline: '' });
+            await api.post(`/tasks/${team.team._id}`, newTask);
+            setNewTask({ title: '', description: '', priority: 'Medium', deadline: '', assignedTo: '' });
             setShowNewTask(false);
             refreshTasks();
         } catch (err) {
@@ -448,7 +455,7 @@ const TasksTab = ({ team, tasks, refreshTasks }) => {
 
     const updateTaskStatus = async (taskId, newStatus) => {
         try {
-            await api.patch(`/tasks/${team._id}/${taskId}`, { status: newStatus });
+            await api.patch(`/tasks/${team.team._id}/${taskId}`, { status: newStatus });
             refreshTasks();
         } catch (err) { console.error(err); }
     };
@@ -524,6 +531,7 @@ const TasksTab = ({ team, tasks, refreshTasks }) => {
                                                 <div className="w-6 h-6 rounded-full bg-indigo-500 flex items-center justify-center text-[9px] font-bold border-2 border-[#1e293b]" title={task.assignedTo?.displayName}>
                                                     {task.assignedTo?.displayName?.substring(0, 1) || '?'}
                                                 </div>
+                                                {task.assignedTo && <span className="ml-2 text-[10px] text-gray-400 font-medium">@{task.assignedTo.displayName?.split(' ')[0]}</span>}
                                             </div>
 
                                             {task.deadline && (
@@ -581,6 +589,15 @@ const TasksTab = ({ team, tasks, refreshTasks }) => {
                                         <input type="date" value={newTask.deadline} onChange={(e) => setNewTask({ ...newTask, deadline: e.target.value })} className="input-field bg-[#0f172a]/50" />
                                     </div>
                                 </div>
+                                <div className="space-y-1">
+                                    <label className="text-xs font-black uppercase text-gray-500 tracking-wider ml-1">Assign To</label>
+                                    <select value={newTask.assignedTo} onChange={(e) => setNewTask({ ...newTask, assignedTo: e.target.value })} className="input-field bg-[#0f172a]/50">
+                                        <option value="">Unassigned</option>
+                                        {team?.team?.members?.map(m => (
+                                            <option key={m.user._id} value={m.user._id}>{m.user.displayName || m.user.email}</option>
+                                        ))}
+                                    </select>
+                                </div>
                                 <button type="submit" className="w-full btn-primary py-4 mt-2 text-base shadow-lg shadow-primary/25">Add to Board</button>
                             </form>
                         </motion.div>
@@ -594,7 +611,7 @@ const TasksTab = ({ team, tasks, refreshTasks }) => {
 const ResourcesTab = ({ team, refreshTeam, refreshTasks }) => {
     const handleTemplateApply = async (templateName) => {
         try {
-            await api.post(`/teams/${team._id}/template`, { templateName });
+            await api.post(`/teams/${team.team._id}/template`, { templateName });
             refreshTeam();
             refreshTasks();
             alert(`Template applied!`);
@@ -605,7 +622,7 @@ const ResourcesTab = ({ team, refreshTeam, refreshTasks }) => {
 
     const toggleChecklist = async (itemId, completed) => {
         try {
-            await api.patch(`/teams/${team._id}/checklist/${itemId}`, { completed });
+            await api.patch(`/teams/${team.team._id}/checklist/${itemId}`, { completed });
             refreshTeam();
         } catch (err) { console.error(err); }
     };
@@ -619,7 +636,7 @@ const ResourcesTab = ({ team, refreshTeam, refreshTasks }) => {
                 </div>
             </header>
 
-            {!team?.template || team.template === 'None' ? (
+            {!team?.workspace?.checklist?.length ? (
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     {['Hackathon Starter', 'AI/ML Project', 'SaaS MVP'].map(tpl => (
                         <div key={tpl} className="glass-card p-6 hover:border-primary/50 transition-all cursor-pointer group relative overflow-hidden" onClick={() => handleTemplateApply(tpl)}>
@@ -641,21 +658,21 @@ const ResourcesTab = ({ team, refreshTeam, refreshTasks }) => {
                             </div>
                             <h3 className="text-xl font-bold">Submission Checklist</h3>
                         </div>
-                        <ChecklistAdder team={team} refreshTeam={refreshTeam} />
+                        <ChecklistAdder team={team.team} refreshTeam={refreshTeam} />
                     </div>
                     <div className="space-y-3">
-                        {team.submissionChecklist.map(item => (
+                        {team.workspace.checklist.map(item => (
                             <div key={item._id} onClick={() => toggleChecklist(item._id, !item.completed)} className="w-full flex items-center p-4 bg-[#0f172a]/50 hover:bg-white/5 rounded-xl cursor-pointer group transition-colors border border-white/5">
                                 <div className={cn("w-6 h-6 rounded-full border-2 mr-4 flex items-center justify-center transition-all", item.completed ? "bg-emerald-500 border-emerald-500" : "border-white/20 group-hover:border-primary")}>
                                     {item.completed && <Check className="w-3.5 h-3.5 text-white" />}
                                 </div>
                                 <div className="flex flex-col">
-                                    <span className={cn("text-sm font-medium transition-colors", item.completed ? "text-gray-500 line-through" : "text-gray-200")}>{item.item}</span>
+                                    <span className={cn("text-sm font-medium transition-colors", item.completed ? "text-gray-500 line-through" : "text-gray-200")}>{item.title}</span>
                                     {item.description && <span className="text-[11px] text-gray-500 mt-0.5">{item.description}</span>}
                                 </div>
                             </div>
                         ))}
-                        {team.submissionChecklist.length === 0 && (
+                        {!team.workspace.checklist.length && (
                             <div className="text-center py-10 text-gray-500 border-2 border-dashed border-white/5 rounded-2xl">
                                 <p className="text-sm">No items in your checklist yet.</p>
                             </div>
@@ -675,7 +692,7 @@ const ChecklistAdder = ({ team, refreshTeam }) => {
         e.preventDefault();
         if (!newItem.item.trim()) return;
         try {
-            await api.post(`/teams/${team._id}/checklist`, newItem);
+            await api.post(`/teams/${team._id}/checklist`, { title: newItem.item, description: newItem.description });
             setNewItem({ item: '', description: '' });
             setIsAdding(false);
             refreshTeam();
@@ -746,7 +763,7 @@ const AITab = ({ team }) => {
         setIsLoading(true);
 
         try {
-            const res = await api.post(`/ai/chat/${team._id}`, {
+            const res = await api.post(`/ai/chat/${team.team._id}`, {
                 prompt: textToQuery,
                 type: customType || 'general'
             });
@@ -839,9 +856,31 @@ const TeamTab = ({ team, refreshTeam }) => {
     const [showEdit, setShowEdit] = useState(false);
     const [copied, setCopied] = useState(false);
 
+    const calculateProgress = () => {
+        if (!team?.workspace?.hackathonDate || !team?.workspace?.hackathonEndDate) return 0;
+        const start = new Date(team.workspace.hackathonDate).getTime();
+
+        // Normalize end date to the end of the day (23:59:59)
+        const endDate = new Date(team.workspace.hackathonEndDate);
+        endDate.setHours(23, 59, 59, 999);
+        const end = endDate.getTime();
+
+        const now = new Date().getTime();
+        if (now < start) return 0;
+        if (now > end) return 100;
+
+        const total = end - start;
+        if (total <= 0) return 100;
+
+        return Math.min(100, Math.round(((now - start) / total) * 100));
+    };
+
+    const progress = calculateProgress();
+    const isOver = progress === 100;
+
     const handleCopy = () => {
-        if (!team?.inviteCode) return;
-        navigator.clipboard.writeText(team.inviteCode);
+        if (!team?.workspace?.inviteCode) return;
+        navigator.clipboard.writeText(team.workspace.inviteCode);
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
     };
@@ -864,33 +903,70 @@ const TeamTab = ({ team, refreshTeam }) => {
             </header>
 
             {/* Team Info Banner */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-10">
                 <div className="glass-panel p-6 bg-primary/5 border-primary/10">
                     <p className="text-[10px] font-black uppercase tracking-widest text-primary mb-2">Hackathon</p>
-                    <h4 className="text-lg font-bold">{team?.hackathonName || 'No Event Linked'}</h4>
+                    <h4 className="text-lg font-bold truncate">{team?.workspace?.hackathonName || 'No Event Linked'}</h4>
                 </div>
                 <div className="glass-panel p-6 bg-secondary/5 border-secondary/10">
                     <p className="text-[10px] font-black uppercase tracking-widest text-secondary mb-2">Start Date</p>
                     <h4 className="text-lg font-bold">
-                        {team?.hackathonStartDate ? new Date(team.hackathonStartDate).toLocaleDateString(undefined, { dateStyle: 'long' }) : 'Not Scheduled'}
+                        {team?.workspace?.hackathonDate ? new Date(team.workspace.hackathonDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : 'N/A'}
+                    </h4>
+                </div>
+                <div className="glass-panel p-6 bg-rose-500/5 border-rose-500/10">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-rose-400 mb-2">End Date</p>
+                    <h4 className="text-lg font-bold">
+                        {team?.workspace?.hackathonEndDate ? new Date(team.workspace.hackathonEndDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : 'N/A'}
                     </h4>
                 </div>
                 <div className="glass-panel p-6 bg-white/5 border-white/10">
                     <p className="text-[10px] font-black uppercase tracking-widest text-gray-500 mb-2">Capacity</p>
                     <div className="flex items-center gap-2">
-                        <h4 className="text-lg font-bold">{team?.members?.length} / {team?.memberSize || 4}</h4>
-                        <div className="h-1.5 flex-1 bg-white/10 rounded-full overflow-hidden max-w-[100px]">
-                            <div
-                                style={{ width: `${(team?.members?.length / (team.memberSize || 4)) * 100}%` }}
-                                className={cn("h-full transition-all duration-1000", team.members.length >= team.memberSize ? "bg-rose-500" : "bg-primary")}
-                            />
-                        </div>
+                        <h4 className="text-lg font-bold">{team?.team?.members?.length || 0} / {team?.workspace?.memberSize || 4}</h4>
                     </div>
                 </div>
             </div>
 
+            {/* Hackathon Progress Bar */}
+            {team?.workspace?.hackathonDate && team?.workspace?.hackathonEndDate && (
+                <div className="glass-panel p-8 mb-10 border-primary/20 relative overflow-hidden group">
+                    <div className="absolute top-0 right-0 p-20 bg-primary/10 blur-[80px] rounded-full -mr-20 -mt-20 group-hover:bg-primary/20 transition-colors" />
+                    <div className="relative z-10">
+                        <div className="flex justify-between items-end mb-4">
+                            <div>
+                                <h3 className="text-xl font-black mb-1">Hackathon Timeline</h3>
+                                <p className="text-sm text-gray-500">Live countdown to final submission.</p>
+                            </div>
+                            <div className="text-right">
+                                <span className={cn("text-2xl font-black", isOver ? "text-rose-500" : "text-primary")}>{progress}%</span>
+                                <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">{isOver ? "Time's Up!" : "Completion"}</p>
+                            </div>
+                        </div>
+                        <div className="h-4 w-full bg-white/5 rounded-full overflow-hidden border border-white/10 p-0.5">
+                            <motion.div
+                                initial={{ width: 0 }}
+                                animate={{ width: `${progress}%` }}
+                                transition={{ duration: 2, ease: "easeOut" }}
+                                className={cn(
+                                    "h-full rounded-full relative",
+                                    isOver ? "bg-rose-500 shadow-[0_0_20px_rgba(244,63,94,0.4)]" : "bg-gradient-to-r from-primary to-secondary shadow-[0_0_20px_rgba(99,102,241,0.4)]"
+                                )}
+                            >
+                                <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20" />
+                                {!isOver && <div className="absolute right-0 top-0 bottom-0 w-8 bg-white/20 blur-md animate-pulse" />}
+                            </motion.div>
+                        </div>
+                        <div className="flex justify-between mt-3 text-[10px] font-bold text-gray-500 uppercase tracking-widest px-1">
+                            <span>{new Date(team.workspace.hackathonDate).toLocaleDateString()}</span>
+                            <span>{new Date(team.workspace.hackathonEndDate).toLocaleDateString()}</span>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {team?.members?.map((m, i) => (
+                {team?.team?.members?.map((m, i) => (
                     <motion.div
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
@@ -915,7 +991,7 @@ const TeamTab = ({ team, refreshTeam }) => {
 
                         <span className={cn(
                             "px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border",
-                            m.role === 'Admin' ? "bg-purple-500/10 text-purple-400 border-purple-500/20" : "bg-blue-500/10 text-blue-400 border-blue-500/20"
+                            m.role?.toLowerCase() === 'admin' ? "bg-purple-500/10 text-purple-400 border-purple-500/20" : "bg-blue-500/10 text-blue-400 border-blue-500/20"
                         )}>{m.role}</span>
 
                         <div className="mt-6 flex space-x-2 w-full justify-center">
@@ -952,7 +1028,7 @@ const TeamTab = ({ team, refreshTeam }) => {
                                     <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 text-left ml-1">Invite Code</label>
                                     <div className="flex items-center gap-2">
                                         <div className="flex-1 bg-black/50 border border-white/10 rounded-xl px-4 py-3 font-mono text-lg tracking-widest text-primary text-center select-all">
-                                            {team?.inviteCode || 'LOADING...'}
+                                            {team?.workspace?.inviteCode || 'LOADING...'}
                                         </div>
                                         <button
                                             onClick={handleCopy}
@@ -976,11 +1052,12 @@ const TeamTab = ({ team, refreshTeam }) => {
 
 const EditTeamModal = ({ team, setShowEdit, refreshTeam }) => {
     const [formData, setFormData] = useState({
-        name: team.name,
-        hackathonName: team.hackathonName || '',
-        hackathonStartDate: team.hackathonStartDate ? team.hackathonStartDate.split('T')[0] : '',
-        memberSize: team.memberSize || 4,
-        description: team.description || ''
+        name: team.team.name,
+        hackathonName: team.workspace.hackathonName || '',
+        hackathonDate: team.workspace.hackathonDate ? team.workspace.hackathonDate.split('T')[0] : '',
+        hackathonEndDate: team.workspace.hackathonEndDate ? team.workspace.hackathonEndDate.split('T')[0] : '',
+        memberSize: team.workspace.memberSize || 4,
+        description: team.team.description || ''
     });
     const [loading, setLoading] = useState(false);
 
@@ -988,7 +1065,14 @@ const EditTeamModal = ({ team, setShowEdit, refreshTeam }) => {
         e.preventDefault();
         setLoading(true);
         try {
-            await api.patch(`/teams/${team._id}`, formData);
+            await api.patch(`/teams/${team.team._id}`, {
+                name: formData.name,
+                hackathonName: formData.hackathonName,
+                hackathonDate: formData.hackathonDate,
+                hackathonEndDate: formData.hackathonEndDate,
+                memberSize: formData.memberSize,
+                description: formData.description
+            });
             refreshTeam();
             setShowEdit(false);
         } catch (err) {
@@ -1019,11 +1103,15 @@ const EditTeamModal = ({ team, setShowEdit, refreshTeam }) => {
                     <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-1">
                             <label className="text-xs font-black uppercase text-gray-500 tracking-wider ml-1">Start Date</label>
-                            <input type="date" value={formData.hackathonStartDate} onChange={e => setFormData({ ...formData, hackathonStartDate: e.target.value })} className="input-field bg-black/30" />
+                            <input type="date" value={formData.hackathonDate} onChange={e => setFormData({ ...formData, hackathonDate: e.target.value })} className="input-field bg-black/30" />
+                        </div>
+                        <div className="space-y-1">
+                            <label className="text-xs font-black uppercase text-gray-500 tracking-wider ml-1">End Date</label>
+                            <input type="date" value={formData.hackathonEndDate} onChange={e => setFormData({ ...formData, hackathonEndDate: e.target.value })} className="input-field bg-black/30" />
                         </div>
                         <div className="space-y-1">
                             <label className="text-xs font-black uppercase text-gray-500 tracking-wider ml-1">Member Limit</label>
-                            <input type="number" min={team.members.length} max="10" value={formData.memberSize} onChange={e => setFormData({ ...formData, memberSize: e.target.value })} className="input-field bg-black/30" />
+                            <input type="number" min={team.team.members.length} max="10" value={formData.memberSize} onChange={e => setFormData({ ...formData, memberSize: e.target.value })} className="input-field bg-black/30" />
                         </div>
                     </div>
                     <button type="submit" disabled={loading} className="w-full btn-primary py-4 mt-2 shadow-lg shadow-primary/20">
@@ -1043,19 +1131,19 @@ const GithubTab = ({ team, refreshTeam }) => {
     const fetchStats = async () => {
         setLoading(true);
         try {
-            const res = await api.get(`/github/stats/${team._id}`);
+            const res = await api.get(`/github/stats/${team.team._id}`);
             setStats(res.data);
         } catch (err) { console.error(err); }
         finally { setLoading(false); }
     };
 
     useEffect(() => {
-        if (team?.githubConnected && team?.githubRepoName) fetchStats();
-    }, [team?.githubConnected, team?.githubRepoName]);
+        if (team?.team?.githubConnected && team?.team?.githubRepoName) fetchStats();
+    }, [team?.team?.githubConnected, team?.team?.githubRepoName]);
 
     const handleConnect = async () => {
         try {
-            const res = await api.get(`/github/auth/${team._id}`);
+            const res = await api.get(`/github/auth/${team.team._id}`);
             if (res.data.url) window.location.href = res.data.url;
         } catch (err) { alert(err.response?.data?.message || "Auth failed"); }
     };
@@ -1063,12 +1151,12 @@ const GithubTab = ({ team, refreshTeam }) => {
     const handleRepoConnect = async (e) => {
         e.preventDefault();
         try {
-            await api.post(`/github/connect-repo/${team._id}`, repoInfo);
+            await api.post(`/github/connect-repo/${team.team._id}`, repoInfo);
             refreshTeam();
-        } catch (err) { alert("Failed to connect repo"); }
+        } catch (err) { alert(err.response?.data?.message || "Failed to connect repo"); }
     };
 
-    if (!team?.githubConnected) return (
+    if (!team?.team?.githubConnected) return (
         <div className="flex items-center justify-center h-[60vh]">
             <div className="glass-panel p-12 text-center max-w-md relative overflow-hidden">
                 <div className="absolute inset-0 bg-gradient-to-br from-gray-900 via-[#0f172a] to-black" />
@@ -1086,7 +1174,7 @@ const GithubTab = ({ team, refreshTeam }) => {
         </div>
     );
 
-    if (!team?.githubRepoName) return (
+    if (!team?.team?.githubRepoName) return (
         <div className="flex items-center justify-center h-[60vh]">
             <div className="glass-panel p-12 max-w-md w-full border-t border-white/10">
                 <div className="text-center mb-8">
@@ -1120,8 +1208,8 @@ const GithubTab = ({ team, refreshTeam }) => {
                         <Github className="w-6 h-6 text-white" />
                     </div>
                     <div>
-                        <h2 className="text-xl font-bold tracking-tight">{team.githubRepoName}</h2>
-                        <a href={team.githubRepo} target="_blank" rel="noreferrer" className="text-xs text-primary hover:text-primary-hover hover:underline flex items-center font-medium transition-colors">
+                        <h2 className="text-xl font-bold tracking-tight">{team.team.githubRepoName}</h2>
+                        <a href={team.team.githubRepo} target="_blank" rel="noreferrer" className="text-xs text-primary hover:text-primary-hover hover:underline flex items-center font-medium transition-colors">
                             View on GitHub <ExternalLink className="w-3 h-3 ml-1" />
                         </a>
                     </div>

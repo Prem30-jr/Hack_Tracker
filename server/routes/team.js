@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const Team = require('../models/Team');
+const Workspace = require('../models/Workspace');
 const { protect } = require('../middleware/auth');
 const { checkTeamRole } = require('../middleware/teamAuth');
 const crypto = require('crypto');
@@ -8,25 +9,33 @@ const templates = require('../config/templateData');
 const Task = require('../models/Task');
 
 // @route   POST /api/teams
-// @desc    Create a new team
+// @desc    Create a new team and its workspace
 // @access  Protected
 router.post('/', protect, async (req, res) => {
     try {
-        const { name, hackathonName, hackathonStartDate, memberSize, description } = req.body;
-        const inviteCode = crypto.randomBytes(4).toString('hex').toUpperCase();
+        const { name, hackathonName, hackathonDate, memberSize } = req.body;
 
+        // 1. Create Team
         const team = await Team.create({
             name,
-            hackathonName,
-            hackathonStartDate,
-            memberSize: memberSize || 4,
-            description,
-            inviteCode,
             admin: req.mongoUser._id,
             members: [{ user: req.mongoUser._id, role: 'admin' }],
         });
 
-        res.status(201).json(team);
+        // 2. Create Workspace
+        const inviteCode = crypto.randomBytes(4).toString('hex').toUpperCase();
+        const inviteLink = `${process.env.FRONTEND_URL}/join/${inviteCode}`;
+
+        const workspace = await Workspace.create({
+            team: team._id,
+            hackathonName,
+            hackathonDate,
+            memberSize: memberSize || 4,
+            inviteCode,
+            inviteLink
+        });
+
+        res.status(201).json({ team, workspace });
     } catch (error) {
         console.error(error);
         res.status(500).json({ message: 'Server Error' });
@@ -38,11 +47,12 @@ router.post('/', protect, async (req, res) => {
 // @access  Protected
 router.post('/join/:inviteCode', protect, async (req, res) => {
     try {
-        const team = await Team.findOne({ inviteCode: req.params.inviteCode });
-
-        if (!team) {
+        const workspace = await Workspace.findOne({ inviteCode: req.params.inviteCode });
+        if (!workspace) {
             return res.status(404).json({ message: 'Invalid invite code' });
         }
+
+        const team = await Team.findById(workspace.team);
 
         // Check if already a member
         const isMember = team.members.some(
@@ -53,14 +63,14 @@ router.post('/join/:inviteCode', protect, async (req, res) => {
             return res.status(400).json({ message: 'Already a member of this team' });
         }
 
-        if (team.members.length >= (team.memberSize || 4)) {
+        if (team.members.length >= (workspace.memberSize || 4)) {
             return res.status(400).json({ message: 'Team is already full' });
         }
 
         team.members.push({ user: req.mongoUser._id, role: 'member' });
         await team.save();
 
-        res.status(200).json(team);
+        res.status(200).json({ team, workspace });
     } catch (error) {
         console.error(error);
         res.status(500).json({ message: 'Server Error' });
@@ -68,7 +78,7 @@ router.post('/join/:inviteCode', protect, async (req, res) => {
 });
 
 // @route   GET /api/teams/:teamId
-// @desc    Get team details
+// @desc    Get team and workspace details
 // @access  Protected + Member
 router.get('/:teamId', protect, checkTeamRole(['admin', 'member']), async (req, res) => {
     try {
@@ -76,7 +86,9 @@ router.get('/:teamId', protect, checkTeamRole(['admin', 'member']), async (req, 
             .populate('members.user', 'displayName email photoURL')
             .populate('admin', 'displayName email');
 
-        res.json(team);
+        const workspace = await Workspace.findOne({ team: req.params.teamId });
+
+        res.json({ team, workspace });
     } catch (error) {
         res.status(500).json({ message: 'Server Error' });
     }
@@ -90,14 +102,21 @@ router.get('/', protect, async (req, res) => {
         const teams = await Team.find({
             'members.user': req.mongoUser._id
         });
-        res.json(teams);
+
+        // Return teams with their workspaces
+        const teamsWithWorkspaces = await Promise.all(teams.map(async (team) => {
+            const workspace = await Workspace.findOne({ team: team._id });
+            return { team, workspace };
+        }));
+
+        res.json(teamsWithWorkspaces);
     } catch (error) {
         res.status(500).json({ message: 'Server Error' });
     }
 });
 
 // @route   POST /api/teams/:teamId/template
-// @desc    Apply a template to a team
+// @desc    Apply a template to a workspace
 // @access  Protected + Admin
 router.post('/:teamId/template', protect, checkTeamRole(['admin']), async (req, res) => {
     try {
@@ -108,52 +127,47 @@ router.post('/:teamId/template', protect, checkTeamRole(['admin']), async (req, 
             return res.status(400).json({ message: 'Invalid template name' });
         }
 
-        const team = await Team.findById(req.params.teamId);
-        if (!team) return res.status(404).json({ message: 'Team not found' });
+        const workspace = await Workspace.findOne({ team: req.params.teamId });
+        if (!workspace) return res.status(404).json({ message: 'Workspace not found' });
 
-        if (!req.mongoUser) {
-            return res.status(401).json({ message: 'User profile not synced' });
-        }
-
-        team.template = templateName;
-        team.submissionChecklist = template.checklist.map(item => ({ item, completed: false }));
-        await team.save();
+        workspace.checklist = template.checklist.map(title => ({ title, completed: false }));
+        await workspace.save();
 
         // Seed tasks
         const taskPromises = template.tasks.map(taskData => {
             return Task.create({
                 ...taskData,
-                team: team._id,
+                team: req.params.teamId,
                 createdBy: req.mongoUser._id
             });
         });
 
         await Promise.all(taskPromises);
 
-        res.json({ message: `Template ${templateName} applied successfully`, team });
+        res.json({ message: `Template ${templateName} applied successfully`, workspace });
     } catch (error) {
         console.error('Template Application Error:', error);
         res.status(500).json({ message: 'Server Error during template application' });
     }
 });
 
-// @route   PATCH /api/teams/:teamId/checklist
+// @route   PATCH /api/teams/:teamId/checklist/:itemId
 // @desc    Update checklist item
 // @access  Protected + Member
 router.patch('/:teamId/checklist/:itemId', protect, checkTeamRole(['admin', 'member']), async (req, res) => {
     try {
         const { completed } = req.body;
-        const team = await Team.findById(req.params.teamId);
+        const workspace = await Workspace.findOne({ team: req.params.teamId });
 
-        const checkItem = team.submissionChecklist.id(req.params.itemId);
+        const checkItem = workspace.checklist.id(req.params.itemId);
         if (!checkItem) {
             return res.status(404).json({ message: 'Checklist item not found' });
         }
 
         checkItem.completed = completed;
-        await team.save();
+        await workspace.save();
 
-        res.json(team);
+        res.json(workspace);
     } catch (error) {
         console.error(error);
         res.status(500).json({ message: 'Server Error' });
@@ -161,22 +175,28 @@ router.patch('/:teamId/checklist/:itemId', protect, checkTeamRole(['admin', 'mem
 });
 
 // @route   PATCH /api/teams/:teamId
-// @desc    Update team details
+// @desc    Update team and workspace details
 // @access  Protected + Admin
 router.patch('/:teamId', protect, checkTeamRole(['admin']), async (req, res) => {
     try {
-        const { name, hackathonName, hackathonStartDate, memberSize, description } = req.body;
+        const { name, hackathonName, hackathonDate, hackathonEndDate, memberSize, description } = req.body;
 
         const team = await Team.findByIdAndUpdate(
             req.params.teamId,
-            { name, hackathonName, hackathonStartDate, memberSize, description },
+            { name, description },
             { new: true }
         );
 
-        res.json(team);
+        const workspace = await Workspace.findOneAndUpdate(
+            { team: req.params.teamId },
+            { hackathonName, hackathonDate, hackathonEndDate, memberSize },
+            { new: true, runValidators: true }
+        );
+
+        res.json({ team, workspace });
     } catch (error) {
-        console.error('Update Team Error:', error);
-        res.status(500).json({ message: 'Server Error' });
+        console.error('Update Team Error Trace:', error);
+        res.status(500).json({ message: 'Server Error', details: error.message });
     }
 });
 
@@ -185,15 +205,61 @@ router.patch('/:teamId', protect, checkTeamRole(['admin']), async (req, res) => 
 // @access  Protected + Member
 router.post('/:teamId/checklist', protect, checkTeamRole(['admin', 'member']), async (req, res) => {
     try {
-        const { item, description } = req.body;
+        const { title, description } = req.body;
+        const workspace = await Workspace.findOne({ team: req.params.teamId });
+
+        workspace.checklist.push({ title, description, completed: false });
+        await workspace.save();
+
+        res.json(workspace);
+    } catch (error) {
+        console.error('Add Checklist Error:', error);
+        res.status(500).json({ message: 'Server Error' });
+    }
+});
+
+// @route   PATCH /api/teams/:teamId/members/:userId
+// @desc    Update member role
+// @access  Protected + Admin
+router.patch('/:teamId/members/:userId', protect, checkTeamRole(['admin']), async (req, res) => {
+    try {
+        const { role } = req.body;
         const team = req.team;
 
-        team.submissionChecklist.push({ item, description, completed: false });
+        const member = team.members.find(m => m.user.toString() === req.params.userId);
+        if (!member) return res.status(404).json({ message: 'Member not found' });
+
+        member.role = role || member.role;
         await team.save();
 
         res.json(team);
     } catch (error) {
-        console.error('Add Checklist Error:', error);
+        res.status(500).json({ message: 'Server Error' });
+    }
+});
+
+// @route   DELETE /api/teams/:teamId/members/:userId
+// @desc    Remove member from team
+// @access  Protected + Admin
+router.delete('/:teamId/members/:userId', protect, checkTeamRole(['admin']), async (req, res) => {
+    try {
+        const team = req.team;
+
+        const memberIndex = team.members.findIndex(m => m.user.toString() === req.params.userId);
+        if (memberIndex === -1) return res.status(404).json({ message: 'Member not found' });
+
+        if (team.members[memberIndex].role === 'admin') {
+            const adminCount = team.members.filter(m => m.role === 'admin').length;
+            if (adminCount <= 1) {
+                return res.status(400).json({ message: 'Cannot remove the only admin' });
+            }
+        }
+
+        team.members.splice(memberIndex, 1);
+        await team.save();
+
+        res.json(team);
+    } catch (error) {
         res.status(500).json({ message: 'Server Error' });
     }
 });

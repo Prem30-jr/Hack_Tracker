@@ -39,9 +39,11 @@ router.get('/callback', async (req, res) => {
             client_id: process.env.GITHUB_CLIENT_ID,
             client_secret: process.env.GITHUB_CLIENT_SECRET,
             code: code,
+            redirect_uri: process.env.GITHUB_CALLBACK_URL,
         }, {
             headers: {
                 Accept: 'application/json',
+                'User-Agent': 'HackTracker-App'
             },
         });
 
@@ -81,6 +83,9 @@ router.post('/connect-repo/:teamId', protect, checkTeamRole(['admin']), async (r
 
     try {
         const team = await Team.findById(teamId);
+        if (!team) {
+            return res.status(404).json({ message: 'Team not found' });
+        }
         if (!team.githubAccessToken) {
             return res.status(400).json({ message: 'GitHub not authorized. Please authenticate first.' });
         }
@@ -88,7 +93,8 @@ router.post('/connect-repo/:teamId', protect, checkTeamRole(['admin']), async (r
         // Verify repo exists and we have access
         const repoRes = await axios.get(`https://api.github.com/repos/${owner}/${repo}`, {
             headers: {
-                Authorization: `token ${team.githubAccessToken}`,
+                Authorization: `Bearer ${team.githubAccessToken}`,
+                'User-Agent': 'HackTracker-App'
             },
         });
 
@@ -100,8 +106,11 @@ router.post('/connect-repo/:teamId', protect, checkTeamRole(['admin']), async (r
 
         res.json({ message: 'Repository connected successfully', team });
     } catch (error) {
-        console.error(error);
-        res.status(400).json({ message: 'Failed to connect repository. Ensure owner/repo are correct and you have access.' });
+        console.error('GitHub Connect Error:', error.response?.data || error.message);
+        const errorMessage = error.response?.status === 404
+            ? 'Repository not found. Check owner/repo names and permissions.'
+            : 'Failed to connect repository. GitHub API error.';
+        res.status(400).json({ message: errorMessage });
     }
 });
 
@@ -119,7 +128,10 @@ router.get('/stats/:teamId', protect, checkTeamRole(['admin', 'member']), async 
 
         const { githubRepoOwner, githubRepoName, githubAccessToken } = team;
         const config = {
-            headers: { Authorization: `token ${githubAccessToken}` }
+            headers: {
+                Authorization: `Bearer ${githubAccessToken}`,
+                'User-Agent': 'HackTracker-App'
+            }
         };
 
         // Fetch Commits (last 30)

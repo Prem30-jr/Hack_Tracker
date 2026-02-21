@@ -27,7 +27,7 @@ const Dashboard = () => {
     const navigate = useNavigate();
     const [inviteLink, setInviteLink] = useState('');
     const [showCreateModal, setShowCreateModal] = useState(false);
-    const [newTeam, setNewTeam] = useState({ name: '', hackathonName: '' });
+    const [newTeam, setNewTeam] = useState({ name: '', hackathonName: '', hackathonDate: '', memberSize: 4 });
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
     const [createdTeam, setCreatedTeam] = useState(null);
@@ -62,7 +62,8 @@ const Dashboard = () => {
         setError('');
         try {
             const res = await api.post('/teams', newTeam);
-            setCreatedTeam(res.data);
+            // The API now returns { team, workspace }
+            setCreatedTeam(res.data.team);
             fetchMyTeams();
         } catch (err) {
             setError(err.response?.data?.message || "Failed to create team");
@@ -77,7 +78,8 @@ const Dashboard = () => {
         setError('');
         try {
             const res = await api.post(`/teams/join/${inviteLink}`);
-            navigate(`/workspace/${res.data._id}`);
+            // The API now returns { team, workspace }
+            navigate(`/workspace/${res.data.team._id}`);
         } catch (err) {
             setError(err.response?.data?.message || "Invalid invite code");
         }
@@ -226,58 +228,66 @@ const Dashboard = () => {
                         </div>
                     ) : (
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                            {myTeams.map((team, i) => (
+                            {myTeams.map((data, i) => (
                                 <motion.div
                                     initial={{ opacity: 0, y: 20 }}
                                     animate={{ opacity: 1, y: 0 }}
                                     transition={{ delay: 0.1 * i }}
-                                    key={team._id}
+                                    key={data.team._id}
                                     whileHover={{ y: -5 }}
-                                    onClick={() => navigate(`/workspace/${team._id}`)}
+                                    onClick={() => navigate(`/workspace/${data.team._id}`)}
                                     className="glass-card p-8 cursor-pointer group hover:bg-[#1e293b]/60 border-white/5 hover:border-primary/30 relative overflow-hidden"
                                 >
-                                    <div className="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-full blur-[40px] -mr-16 -mt-16 transition-opacity group-hover:opacity-100 opacity-0" />
+                                    {(() => {
+                                        const teamItem = data.team;
+                                        const workspaceItem = data.workspace;
+                                        return (
+                                            <>
+                                                <div className="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-full blur-[40px] -mr-16 -mt-16 transition-opacity group-hover:opacity-100 opacity-0" />
 
-                                    <div className="flex justify-between items-start mb-6 relative z-10">
-                                        <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#1e293b] to-[#0f172a] flex items-center justify-center border border-white/10 shadow-lg group-hover:border-primary/30 transition-colors">
-                                            <Trophy className="w-6 h-6 text-primary group-hover:text-white transition-colors" />
-                                        </div>
-                                        <span className={cn(
-                                            "px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border",
-                                            team.hackathonName ? "bg-secondary/10 text-secondary border-secondary/20" : "bg-primary/10 text-primary border-primary/20"
-                                        )}>
-                                            {team.hackathonName ? 'Hackathon' : 'Project'}
-                                        </span>
-                                    </div>
-
-                                    <h3 className="text-xl font-bold mb-2 text-white group-hover:text-primary transition-colors tracking-tight">{team.name}</h3>
-                                    <div className="flex flex-col space-y-1 mb-6">
-                                        <p className="text-sm text-gray-400 font-medium truncate">{team.hackathonName || 'General Development'}</p>
-                                        {team.hackathonStartDate && (
-                                            <p className="text-[10px] text-gray-500 font-bold uppercase tracking-wider flex items-center">
-                                                <Calendar className="w-3 h-3 mr-1.5 text-secondary" />
-                                                {new Date(team.hackathonStartDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
-                                            </p>
-                                        )}
-                                    </div>
-
-                                    <div className="flex items-center justify-between pt-6 border-t border-white/5 relative z-10">
-                                        <div className="flex items-center -space-x-2">
-                                            {team.members.slice(0, 3).map((m, idx) => (
-                                                <div key={idx} className="w-8 h-8 rounded-full bg-slate-800 border-2 border-[#1e293b] flex items-center justify-center text-[10px] font-bold text-gray-400">
-                                                    {m.user?.displayName?.charAt(0) || '?'}
+                                                <div className="flex justify-between items-start mb-6 relative z-10">
+                                                    <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#1e293b] to-[#0f172a] flex items-center justify-center border border-white/10 shadow-lg group-hover:border-primary/30 transition-colors">
+                                                        <Trophy className="w-6 h-6 text-primary group-hover:text-white transition-colors" />
+                                                    </div>
+                                                    <span className={cn(
+                                                        "px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border",
+                                                        workspaceItem?.hackathonName ? "bg-secondary/10 text-secondary border-secondary/20" : "bg-primary/10 text-primary border-primary/20"
+                                                    )}>
+                                                        {workspaceItem?.hackathonName ? 'Hackathon' : 'Project'}
+                                                    </span>
                                                 </div>
-                                            ))}
-                                            {team.members.length > 3 && (
-                                                <div className="w-8 h-8 rounded-full bg-slate-800 border-2 border-[#1e293b] flex items-center justify-center text-[10px] font-bold text-gray-400">
-                                                    +{team.members.length - 3}
+
+                                                <h3 className="text-xl font-bold mb-2 text-white group-hover:text-primary transition-colors tracking-tight">{teamItem.name}</h3>
+                                                <div className="flex flex-col space-y-1 mb-6">
+                                                    <p className="text-sm text-gray-400 font-medium truncate">{workspaceItem?.hackathonName || 'General Development'}</p>
+                                                    {workspaceItem?.hackathonDate && (
+                                                        <p className="text-[10px] text-gray-500 font-bold uppercase tracking-wider flex items-center">
+                                                            <Calendar className="w-3 h-3 mr-1.5 text-secondary" />
+                                                            {new Date(workspaceItem.hackathonDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                                                        </p>
+                                                    )}
                                                 </div>
-                                            )}
-                                        </div>
-                                        <div className="text-xs font-bold text-gray-500 group-hover:text-white transition-colors flex items-center uppercase tracking-wider">
-                                            Open <ChevronRight className="w-3 h-3 ml-1" />
-                                        </div>
-                                    </div>
+
+                                                <div className="flex items-center justify-between pt-6 border-t border-white/5 relative z-10">
+                                                    <div className="flex items-center -space-x-2">
+                                                        {teamItem.members?.slice(0, 3).map((m, idx) => (
+                                                            <div key={idx} className="w-8 h-8 rounded-full bg-slate-800 border-2 border-[#1e293b] flex items-center justify-center text-[10px] font-bold text-gray-400">
+                                                                {m.user?.displayName?.charAt(0) || '?'}
+                                                            </div>
+                                                        ))}
+                                                        {teamItem.members?.length > 3 && (
+                                                            <div className="w-8 h-8 rounded-full bg-slate-800 border-2 border-[#1e293b] flex items-center justify-center text-[10px] font-bold text-gray-400">
+                                                                +{teamItem.members.length - 3}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                    <div className="text-xs font-bold text-gray-500 group-hover:text-white transition-colors flex items-center uppercase tracking-wider">
+                                                        Open <ChevronRight className="w-3 h-3 ml-1" />
+                                                    </div>
+                                                </div>
+                                            </>
+                                        );
+                                    })()}
                                 </motion.div>
                             ))}
                         </div>
@@ -340,8 +350,8 @@ const Dashboard = () => {
                                                     required
                                                     type="date"
                                                     className="input-field bg-[#0f172a]/50 focus:bg-[#0f172a]"
-                                                    value={newTeam.hackathonStartDate}
-                                                    onChange={(e) => setNewTeam({ ...newTeam, hackathonStartDate: e.target.value })}
+                                                    value={newTeam.hackathonDate}
+                                                    onChange={(e) => setNewTeam({ ...newTeam, hackathonDate: e.target.value })}
                                                 />
                                             </div>
                                             <div className="space-y-2">

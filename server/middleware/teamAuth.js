@@ -22,7 +22,7 @@ const checkTeamRole = (roles) => {
                 return res.status(403).json({ message: 'Access denied. Not a team member.' });
             }
 
-            if (!roles.includes(member.role)) {
+            if (!roles.map(r => r.toLowerCase()).includes(member.role.toLowerCase())) {
                 return res.status(403).json({ message: `Access denied. Requires one of these roles: ${roles.join(', ')}` });
             }
 
